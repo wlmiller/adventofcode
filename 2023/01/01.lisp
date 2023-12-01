@@ -17,13 +17,11 @@
       (t nil))))
 
 (defun to-digits (line &optional parse-words-p)
-  (let ((index 0)
-        (digits(copy-list '())))
-    (loop
-      (let ((digit (starting-digit (subseq line index) parse-words-p)))
-        (when digit (push digit digits))
-        (incf index)
-        (when (>= index (length line)) (return (reverse digits)))))))
+  (let ((digits (copy-list '())))
+    (dotimes (i (length line))
+      (let ((digit (starting-digit (subseq line i) parse-words-p)))
+        (when digit (push digit digits))))
+    (reverse digits)))
 
 (defun parse-line (line &optional parse-words-p)
   (let* ((digits (to-digits line parse-words-p))
