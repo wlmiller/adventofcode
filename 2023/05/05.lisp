@@ -1,0 +1,97 @@
+(load "../util.lisp")
+
+(defclass range-map ()
+  ((from :accessor from :initarg :from)
+   (to :accessor to :initarg :to)
+   (range :accessor range :initarg :range)))
+
+(shadow 'map)
+(defclass map () ((ranges :accessor ranges :initarg :ranges :initform '())))
+
+(defclass input ()
+  ((seeds :accessor seeds)
+   (maps :accessor maps :initform '())))
+
+(defun read-and-parse (filename)
+  (let* ((input (make-instance 'input))
+         (lines (read-file filename))
+         (seeds (mapcar 'parse-integer (split-string (second (split-string (first lines) #\:)))))
+         (idx 3))
+    (setf (seeds input) seeds)
+    (let ((map (make-instance 'map))
+          (maps (copy-list '())))
+      (loop
+        (when (string= (nth idx lines) "")
+          (setf (ranges map) (reverse (ranges map)))
+          (push map (maps input))
+          (setf map (make-instance 'map))
+          (incf idx 2))
+        (let* ((line (nth idx lines))
+               (ints (mapcar 'parse-integer (split-string line)))
+               (from (second ints))
+               (to (first ints))
+               (range (third ints)))
+          (push (make-instance 'range-map :from from :to to :range range) (ranges map)))
+        (incf idx)
+        (when (>= idx (length lines)) (push map (maps input))(return)))
+      (setf (maps input) (reverse (maps input)))
+      input)))
+
+(defun get-destination (map source)
+  (let ((range-map (find-if (lambda (m) (and (<= (from m) source) (>= (+ (from m) (range m)) source))) (ranges map))))
+    (if range-map (+ (to range-map) (- source (from range-map))) source)))
+
+(defun get-location (maps seed)
+  (let ((dest seed))
+    (dolist (map maps)
+      (setf dest (get-destination map dest)))
+    dest))
+
+(defun part-1 (input)
+  (apply 'min (mapcar (lambda (s) (get-location (maps input) s)) (seeds input)))
+)
+
+(defun overlaps-p (x y)
+  (>= (min (second x) (second y)) (max (first x) (first y)))
+)
+
+(defun get-destination-ranges (map source-range)
+  (let ((dest-ranges (sort (remove-if-not (lambda (r) (overlaps-p `(,(from r) ,(+ (from r) (1- (range r)))) source-range)) (ranges map)) #'< :key #'from))
+        (ranges (copy-list '())))
+    (loop
+      (let* ((dest-range (and dest-ranges (first dest-ranges)))
+             (dest-range-list (and dest-range `(,(from dest-range) ,(+ (from dest-range) (1- (range dest-range)))))))
+        (cond
+          ((and dest-range (< (first source-range) (from dest-range)))
+            (push `(,(first source-range) ,(1- (from dest-range))) ranges)
+            (setf (first source-range) (from dest-range)))
+          ((not dest-range)
+            (push (copy-list source-range) ranges)
+            (setf (first source-range) (1+ (second source-range))))
+          ((and dest-range (overlaps-p source-range dest-range-list))
+            (let ((start (+ (to dest-range) (- (first source-range) (from dest-range))))
+                  (end (+ (to dest-range) (min (- (second source-range) (from dest-range)) (range dest-range)))))
+              (push `(,start ,end) ranges)
+              (incf (first source-range) (- end start))))
+          ((not (overlaps-p source-range dest-range-list)) (pop dest-ranges)))
+        (when (>= (first source-range) (second source-range)) (return))))
+    (reverse ranges)))
+
+(defun part-2 (input)
+  (let ((seeds (seeds input))
+        (source-ranges (copy-list '())))
+    (do ((i 0 (+ i 2)))
+        ((>= i (length seeds)))
+      (push `(,(nth i seeds) ,(+ (nth i seeds) (1- (nth (1+ i) seeds)))) source-ranges))
+    (dolist (m (maps input))
+      (setf source-ranges (mapcan (lambda (s) (get-destination-ranges m s)) source-ranges)))
+    (reduce (lambda (acc cur) (min acc (first cur))) source-ranges :initial-value 999999999999)))
+
+(let ((sample-input (read-and-parse "sample.txt"))
+      (input (read-and-parse "input.txt")))
+  (write (part-1 sample-input))(terpri) ; 35
+  (write (part-1 input))(terpri)        ; 324724204
+  (terpri)
+  (write (part-2 sample-input))(terpri) ; 46
+  (write (part-2 input))(terpri)        ; 104070862
+)
